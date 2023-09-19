@@ -7,6 +7,7 @@ import (
 
 func main() {
 	r := gee.New()
+	r.Use(gee.Logger())
 	// r *Engine: 继承了 RouterGroup 的所有方法，可以直接调用 GET
 	r.GET(
 		"/index",
@@ -16,11 +17,13 @@ func main() {
 	)
 
 	v1 := r.Group("/v1")
+	v1.Use(gee.Recovery())
 	{
 		v1.GET(
 			"/",
 			func(c *gee.Context) {
-				c.HTML(http.StatusOK, "<h1>hello Gee</h1>")
+				panic("txsb")
+				// c.HTML(http.StatusOK, "<h1>hello Gee</h1>")
 			},
 		)
 
@@ -33,6 +36,7 @@ func main() {
 		)
 	}
 	v2 := r.Group("/v2")
+	v2.Use(gee.LoggerV2())
 	{
 		// -> "/hello/caiqj"
 		v2.GET(

@@ -93,10 +93,18 @@ func (r *router) handler(c *Context) {
 	n, params := r.getRoute(c.Method, c.Path)
 
 	if n == nil {
-		c.String(http.StatusNotFound, "404 NOT FOUND: %s\n", c.Path)
+		c.handlers = append(
+			c.handlers,
+			func(c *Context) {
+				c.String(http.StatusNotFound, "404 NOT FOUND: %s\n", c.Path)
+			},
+		)
 	} else {
 		c.Params = params
 		key := c.Method + "-" + n.pattern
-		r.handlers[key](c)
+		// 把 middleware func 和 route handler 放在一起执行
+		c.handlers = append(c.handlers, r.handlers[key])
 	}
+	// 依次调用中间件和路由方法
+	c.Next()
 }

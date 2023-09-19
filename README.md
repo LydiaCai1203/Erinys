@@ -16,3 +16,33 @@
 2. 中间件
 作用在 /post 分组上的中间件也会作用在其子分组上，子分组也可以单独应用自己的中间件
 ```
+
+## 3. 中间件
+```markdown
+// Next 函数
+func (c *Context) Next() {
+    c.index++
+    s := len(c.handlers)
+    for ; c.index < s; c.index++ {
+        c.handlers[c.index](c)
+    }
+}
+
+// 有 A、B 两个中间件函数
+func A(c *Context) {
+    part1      // 执行路由函数前调用
+    c.Next()
+    part2      // 执行路由函数后调用
+}
+
+func B(c *Context) {
+    part3      // 执行路由函数前调用
+    c.Next()
+    part4      // 执行路由函数后调用
+}
+
+// C 是路由函数
+// 使用 Next 调用 handlers 里的函数
+// 顺序: part1 -> part3 -> C -> part4 -> part2
+handlers := []HandleFunc{A, B, C}
+```
