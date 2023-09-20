@@ -1,6 +1,3 @@
-/*
-只读数据结构 ByteView 用于表示缓存值
-*/
 package geecache
 
 type ByteView struct {
