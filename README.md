@@ -91,4 +91,37 @@ LRU 缓存策略;
 实现时维护一个队列，如果某条记录被访问了，则移动到队尾，淘汰队首数据即可。
 ```
 
-### 2.2 单机并发缓存
+## 单机并发缓存
+```golang
+type Value interface {
+    Len() int
+}
+
+type entry struct {
+    key   string
+    value Value
+}
+
+type ByteView struct {
+    b []byte                                // 存储真实的缓存值
+}
+
+type Cache struct {
+    maxBytes  int64                         // 允许使用的最大内存
+    nbytes    int64                         // 当前已使用的内存
+    ll        *list.List                    // 双向链表
+    cache     map[string]*list.Element      // map, value 指向双向链表的节点
+    OnEvicted func(key string, value Value) // 记录被移除时的回调函数
+}
+
+type cache struct {
+    mu         sync.Mutex
+    lru        *lru.Cache
+    cacheBytes int64
+}
+
+map 里存的 value 是指向双向链表的节点的指针, *list.Element。
+双向链表的节点是 entry 类型, 存储了 k/v 值, v 值类型是 Value 接口类型的。
+Value 接口类型可以转化尾 ByteView 类型。
+cache 类型是一个加锁的 lru 模型，适合单机并发存储。
+```

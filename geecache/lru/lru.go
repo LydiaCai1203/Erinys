@@ -39,7 +39,7 @@ func New(maxBytes int64, OnEvicted func(string, Value)) *Cache {
 func (c *Cache) Get(key string) (value Value, ok bool) {
 	if ele, ok := c.cache[key]; ok {
 		c.ll.MoveToFront(ele)
-		// 取出 ele.Value 转换为 entry 类型(类型断言)
+		// 取出 ele.Value 转换为 entry 类型的指针
 		kv := ele.Value.(*entry)
 		return kv.value, true
 	}
@@ -66,13 +66,13 @@ func (c *Cache) RemoveTail() {
 }
 
 func (c *Cache) Add(key string, value Value) {
+	// ele 是指向双端链表节点的指针
 	if ele, ok := c.cache[key]; ok {
 		// 移到表头
 		c.ll.MoveToFront(ele)
 		kv := ele.Value.(*entry)
 		// 可能新增的 value 比原来的大
 		c.nbytes += int64(value.Len()) - int64(kv.value.Len())
-		// 这一步会更新 map key 的值?
 		kv.value = value
 	} else {
 		// 插入表头
