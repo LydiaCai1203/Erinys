@@ -25,6 +25,7 @@ type Group struct {
 	name      string
 	getter    Getter // 缓存未命中时获取源数据的回调
 	mainCache cache  // 一开始实现的并发缓存
+	peers     PeePicker
 }
 
 var (
@@ -69,10 +70,6 @@ func (g *Group) getLocally(key string) (ByteView, error) {
 	return value, nil
 }
 
-func (g *Group) load(key string) (value ByteView, err error) {
-	return g.getLocally(key)
-}
-
 func (g *Group) Get(key string) (ByteView, error) {
 	if key == "" {
 		return ByteView{}, fmt.Errorf("key is required")
@@ -83,4 +80,31 @@ func (g *Group) Get(key string) (ByteView, error) {
 	}
 	// 如果缓存查不到就
 	return g.load(key)
+}
+
+func (g *Group) RegisterPeers(peers PeePicker) {
+	if g.peers != nil {
+		panic("RegisterPeerPicker called more than once")
+	}
+	g.peers = peers
+}
+
+func (g *Group) getFromPeer(peer PeeGetter, key string) (ByteView, error) {
+	bytes, err := peer.Get(g.name, key)
+	if err != nil {
+		return ByteView{}, err
+	}
+	return ByteView{b: bytes}, nil
+}
+
+func (g *Group) load(key string) (value ByteView, err error) {
+	if g.peers != nil {
+		if peer, ok := g.peers.PickPeer(key); ok {
+			if value, err = g.getFromPeer(peer, key); err == nil {
+				return value, nil
+			}
+			log.Println("[GeeCache] Failed to get from peer", err)
+		}
+	}
+	return g.getLocally(key)
 }
