@@ -2,7 +2,7 @@ package geecache
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"myRPC/geecache/consistenhash"
 	"net/http"
@@ -115,7 +115,7 @@ func (h *httpGetter) Get(group string, key string) ([]byte, error) {
 		return nil, fmt.Errorf("server returned: %v", res.Status)
 	}
 
-	bytes, err := ioutil.ReadAll(res.Body)
+	bytes, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, fmt.Errorf("reading response body: %v", err)
 	}
