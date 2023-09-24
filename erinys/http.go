@@ -1,7 +1,7 @@
 package erinys
 
 import (
-	"erinys/lru"
+	"erinys/consistenhash"
 	"fmt"
 	"net/http"
 	"strings"
@@ -17,14 +17,38 @@ type HandlerFunc func(w http.ResponseWriter, req *http.Request)
 
 // 用户可以通过 HTTP 请求的方式来访问缓存服务器
 type HTTPEngine struct {
-	basepath string
-	router   map[string]HandlerFunc
+	basepath   string
+	router     map[string]HandlerFunc
+	peers      *consistenhash.PeerPool // PeerPool 实例
+	peerclient map[string]*PeerClient  // 真实节点名称 与 PeerClient 的映射
 }
 
-func NewHTTPEngine(basepath string) *HTTPEngine {
+func NewHTTPEngine(
+	basepath string,
+	replicas int,
+	fn consistenhash.HashFunc,
+) *HTTPEngine {
 	return &HTTPEngine{
-		basepath: basepath,
-		router:   make(map[string]HandlerFunc),
+		basepath:   basepath,
+		router:     make(map[string]HandlerFunc),
+		peers:      consistenhash.NewPeerPool(replicas, fn),
+		peerclient: make(map[string]*PeerClient),
+	}
+}
+
+func (engine *HTTPEngine) PickPeer(key string) (*PeerClient, string) {
+	peer := engine.peers.GetPeerByKey(key)
+	pc := engine.peerclient[key]
+	return pc, peer
+}
+
+// peers: ["127.0.0.1:8001", ...]
+func (engine *HTTPEngine) RegisterPeer(peers ...string) {
+	for _, peer := range peers {
+		engine.peerclient[peer] = &PeerClient{
+			baseURL:  fmt.Sprintf("http:%s", peer),
+			basepath: "cache",
+		}
 	}
 }
 
@@ -42,24 +66,8 @@ func (engine *HTTPEngine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	keyname := parts[2]
 	g, ok := groups[groupname]
 	if !ok {
-		g = NewGroup(
-			parts[1],
-			GetterFunc(
-				func(key string) (lru.Value, error) {
-					m := map[string]string{
-						"key1": "value1",
-						"key2": "value2",
-						"key3": "value3",
-					}
-					v, ok := m[key]
-					if !ok {
-						return nil, fmt.Errorf("%s not exit", key)
-					}
-					vv := String(v)
-					return vv, nil
-				}),
-			2<<3,
-		)
+		fmt.Fprintf(w, "500 internel error: %s\n", req.URL)
+		return
 	}
 	v, _ := g.Get(keyname)
 	fmt.Fprintf(w, "%s-%v", keyname, v)

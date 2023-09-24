@@ -1,8 +1,8 @@
 package erinys
 
 import (
-	"erinys/consistenhash"
 	"erinys/lru"
+	"fmt"
 	"sync"
 )
 
@@ -19,11 +19,11 @@ func (f GetterFunc) Get(key string) (lru.Value, error) {
 }
 
 type Group struct {
-	name     string
-	getter   Getter
-	cache    *lru.SafeLruCache
-	peerpool *consistenhash.PeerPool
-	peer     string // 当前 group 所在的真实节点名字
+	name   string
+	getter Getter
+	cache  *lru.SafeLruCache
+	peer   PeerPicker
+	self   string // group 所在节点
 }
 
 var (
@@ -35,18 +35,17 @@ func NewGroup(
 	name string,
 	getter Getter,
 	capacity int64,
-	replicas int,
-	peer string,
-	hashfunc consistenhash.HashFunc,
+	peer PeerPicker,
+	self string,
 ) *Group {
 	mu.Lock()
 	defer mu.Unlock()
 	g := &Group{
-		name:     name,
-		getter:   getter,
-		cache:    lru.NewLruCache(capacity),
-		peer:     peer,
-		peerpool: consistenhash.NewPeerPool(replicas, hashfunc),
+		name:   name,
+		getter: getter,
+		cache:  lru.NewLruCache(capacity),
+		peer:   peer,
+		self:   self,
 	}
 	groups[name] = g
 	return g
@@ -59,29 +58,42 @@ func GetGroup(name string) *Group {
 	return g
 }
 
-// 尝试从本地缓存获取数据，获取不到则从源站获取
-// func (g *Group) Get(key string) (lru.Value, error) {
-// 	// 万一没有给 getter 赋值
-// 	if g.getter == nil {
-// 		return nil, fmt.Errorf("getter not assigned")
-// 	}
-// 	// 看本地缓存有无数据
-// 	v, err := g.cache.Get(key)
-// 	if err == nil {
-// 		fmt.Println("hit cache")
-// 		return v, nil
-// 	}
-// 	// 没有数据则去原站数据访问
-// 	v, _ = g.getter.Get(key)
-// 	g.cache.Add(key, v)
-// 	return v, nil
-// }
-
+// 根据 key 获取数据
 func (g *Group) Get(key string) (lru.Value, error) {
-	// 看要搜索的数据在哪个节点上
-	peer := g.peerpool.GetPeerByKey(key)
-	if peer != peer {
-		// 网络请求别的节点
+	// 需要根据 key 在服务里找到 peer 信息
+	_, peer := g.peer.PickPeer(key)
+	if peer != g.self {
+		v, err := g.getFromPeer(key, g.name)
+		return v, err
 	}
+	v, err := g.getFromLocal(key)
+	return v, err
+}
 
+// 从远程节点获取数据
+func (g *Group) getFromPeer(key string, group string) (lru.Value, error) {
+	peerclient, _ := g.peer.PickPeer(key)
+	v, err := peerclient.Get(group, key)
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// 从本地获取数据
+func (g *Group) getFromLocal(key string) (lru.Value, error) {
+	// 本地请求
+	if g.getter == nil {
+		return nil, fmt.Errorf("getter not assigned")
+	}
+	// 先看本地缓存有无数据
+	v, err := g.cache.Get(key)
+	if err == nil {
+		fmt.Println("hit cache")
+		return v, nil
+	}
+	// 没有数据则去原站数据访问
+	v, _ = g.getter.Get(key)
+	g.cache.Add(key, v)
+	return v, nil
 }
