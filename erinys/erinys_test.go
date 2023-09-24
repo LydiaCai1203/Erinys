@@ -6,12 +6,6 @@ import (
 	"testing"
 )
 
-type String string
-
-func (s String) Len() int64 {
-	return int64(len(s))
-}
-
 func testget(key string) (lru.Value, error) {
 	m := map[string]string{
 		"key1": "value1",

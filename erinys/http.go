@@ -1,10 +1,17 @@
 package erinys
 
 import (
+	"erinys/lru"
 	"fmt"
 	"net/http"
 	"strings"
 )
+
+type String string
+
+func (s String) Len() int64 {
+	return int64(len(s))
+}
 
 type HandlerFunc func(w http.ResponseWriter, req *http.Request)
 
@@ -25,16 +32,51 @@ func NewHTTPEngine(basepath string) *HTTPEngine {
 func (engine *HTTPEngine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	path := req.URL.Path
 	isget := strings.HasPrefix(path, engine.basepath)
-	parts := strings.Split(path, "/")
-	if !isget || len(parts) == 3 {
+	parts := parsePath(path)
+	if !isget || len(parts) != 3 {
 		fmt.Fprintf(w, "404 NOT FOUND: %s\n", req.URL)
+		return
 	}
 
-	// 调用本地缓存，没有则调用源站数据
-	// groupname := parts[1]
-	// keyname := parts[2]
+	groupname := parts[1]
+	keyname := parts[2]
+	g, ok := groups[groupname]
+	if !ok {
+		g = NewGroup(
+			parts[1],
+			GetterFunc(
+				func(key string) (lru.Value, error) {
+					m := map[string]string{
+						"key1": "value1",
+						"key2": "value2",
+						"key3": "value3",
+					}
+					v, ok := m[key]
+					if !ok {
+						return nil, fmt.Errorf("%s not exit", key)
+					}
+					vv := String(v)
+					return vv, nil
+				}),
+			2<<3,
+		)
+	}
+	v, _ := g.Get(keyname)
+	fmt.Fprintf(w, "%s-%v", keyname, v)
 }
 
 func (engine *HTTPEngine) Run(addr string) (err error) {
 	return http.ListenAndServe(addr, engine)
+}
+
+func parsePath(path string) []string {
+	rst := make([]string, 0)
+	parts := strings.Split(path, "/")
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		rst = append(rst, part)
+	}
+	return rst
 }
