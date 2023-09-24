@@ -1,8 +1,8 @@
 package erinys
 
 import (
+	"erinys/consistenhash"
 	"erinys/lru"
-	"fmt"
 	"sync"
 )
 
@@ -19,9 +19,11 @@ func (f GetterFunc) Get(key string) (lru.Value, error) {
 }
 
 type Group struct {
-	name   string
-	getter Getter
-	cache  *lru.SafeLruCache
+	name     string
+	getter   Getter
+	cache    *lru.SafeLruCache
+	peerpool *consistenhash.PeerPool
+	peer     string // 当前 group 所在的真实节点名字
 }
 
 var (
@@ -29,13 +31,22 @@ var (
 	groups = make(map[string]*Group)
 )
 
-func NewGroup(name string, getter Getter, capacity int64) *Group {
+func NewGroup(
+	name string,
+	getter Getter,
+	capacity int64,
+	replicas int,
+	peer string,
+	hashfunc consistenhash.HashFunc,
+) *Group {
 	mu.Lock()
 	defer mu.Unlock()
 	g := &Group{
-		name:   name,
-		getter: getter,
-		cache:  lru.NewLruCache(capacity),
+		name:     name,
+		getter:   getter,
+		cache:    lru.NewLruCache(capacity),
+		peer:     peer,
+		peerpool: consistenhash.NewPeerPool(replicas, hashfunc),
 	}
 	groups[name] = g
 	return g
@@ -49,19 +60,28 @@ func GetGroup(name string) *Group {
 }
 
 // 尝试从本地缓存获取数据，获取不到则从源站获取
+// func (g *Group) Get(key string) (lru.Value, error) {
+// 	// 万一没有给 getter 赋值
+// 	if g.getter == nil {
+// 		return nil, fmt.Errorf("getter not assigned")
+// 	}
+// 	// 看本地缓存有无数据
+// 	v, err := g.cache.Get(key)
+// 	if err == nil {
+// 		fmt.Println("hit cache")
+// 		return v, nil
+// 	}
+// 	// 没有数据则去原站数据访问
+// 	v, _ = g.getter.Get(key)
+// 	g.cache.Add(key, v)
+// 	return v, nil
+// }
+
 func (g *Group) Get(key string) (lru.Value, error) {
-	// 万一没有给 getter 赋值
-	if g.getter == nil {
-		return nil, fmt.Errorf("getter not assigned")
+	// 看要搜索的数据在哪个节点上
+	peer := g.peerpool.GetPeerByKey(key)
+	if peer != peer {
+		// 网络请求别的节点
 	}
-	// 看本地缓存有无数据
-	v, err := g.cache.Get(key)
-	if err == nil {
-		fmt.Println("hit cache")
-		return v, nil
-	}
-	// 没有数据则去原站数据访问
-	v, _ = g.getter.Get(key)
-	g.cache.Add(key, v)
-	return v, nil
+
 }
