@@ -3,6 +3,7 @@ package erinys
 import (
 	"erinys/lru"
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -62,6 +63,7 @@ func GetGroup(name string) *Group {
 func (g *Group) Get(key string) (lru.Value, error) {
 	// 需要根据 key 在服务里找到 peer 信息
 	_, peer := g.peer.PickPeer(key)
+	fmt.Printf("key: %s, self: %v, dst: %v\n", key, g.self, peer)
 	if peer != g.self {
 		v, err := g.getFromPeer(key, g.name)
 		return v, err
@@ -72,8 +74,9 @@ func (g *Group) Get(key string) (lru.Value, error) {
 
 // 从远程节点获取数据
 func (g *Group) getFromPeer(key string, group string) (lru.Value, error) {
+	groupname := strings.Split(group, "-")[0]
 	peerclient, _ := g.peer.PickPeer(key)
-	v, err := peerclient.Get(group, key)
+	v, err := peerclient.Get(groupname, key)
 	if err != nil {
 		return nil, err
 	}
@@ -94,6 +97,8 @@ func (g *Group) getFromLocal(key string) (lru.Value, error) {
 	}
 	// 没有数据则去原站数据访问
 	v, _ = g.getter.Get(key)
-	g.cache.Add(key, v)
+	if v != nil {
+		g.cache.Add(key, v)
+	}
 	return v, nil
 }

@@ -15,16 +15,17 @@ func startCacheServer(host string, otherpeers ...string) {
 	engine.Run(host)
 }
 
-// 每个节点都有自己的 group
+// 每个节点都有自己的 group, 取名叫 test 了
 func createGroup(engine *erinys.HTTPEngine, peer string) {
 	erinys.NewGroup(
-		"test",
+		fmt.Sprintf("%s-%s", "test", peer),
 		erinys.GetterFunc(
 			func(key string) (lru.Value, error) {
 				m := map[string]string{
 					"key1": "value1",
 					"key2": "value2",
 					"key3": "value3",
+					"key4": "value4",
 				}
 				v, ok := m[key]
 				if !ok {
@@ -54,6 +55,6 @@ func main() {
 	}
 
 	// 对外提供服务
-	engine := erinys.NewHTTPEngine("/cache", 5, nil)
-	engine.Run(":9001")
+	allhost := append(otherPeers, "127.0.0.1:9001")
+	startCacheServer("127.0.0.1:9001", allhost...)
 }
